@@ -1,14 +1,21 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+use std::path::PathBuf;
+
+#[derive(Debug, Clone)]
+pub struct Resource {
+    pub file_path: PathBuf,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[derive(Debug)]
+pub enum PlayerEvent {
+    Started(Resource),
+    Paused(Resource),
+    Resumed(Resource),
+    ErrorOccured(Box<dyn std::error::Error>),
+    Finished(Resource),
+}
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+#[derive(Debug)]
+pub enum PlayerCommand {
+    Pause,
+    Resume,
 }

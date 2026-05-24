@@ -1,13 +1,17 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::{env, path::PathBuf};
 
+use morphlings_apis::{PlayerCommand, PlayerEvent};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu};
 
-use crate::resource::scan_resource;
+use crate::{
+    http::{HttpError, start_http_server},
+    player::{PlayerError, start_player},
+    resource::scan_resource,
+};
 
+mod http;
+mod player;
 mod resource;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -33,6 +37,12 @@ enum Error {
     #[snafu(display("failed to scan resource: {source}"))]
     FailedToScanResource { source: Box<Error> },
 
+    #[snafu(display("error occured in player thread: {source}"))]
+    PlayerThreadErrored { source: PlayerError },
+
+    #[snafu(display("error occured in http server thread: {source}"))]
+    HttpThreadErrored { source: HttpError },
+
     #[snafu(whatever, display("other error: {message}"))]
     Whatever {
         message: String,
@@ -43,7 +53,7 @@ enum Error {
 
 type ServerResult<T> = std::result::Result<T, Error>;
 
-fn run() -> ServerResult<()> {
+async fn run() -> ServerResult<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         // No config specified.
@@ -60,6 +70,8 @@ fn run() -> ServerResult<()> {
     let config =
         serde_json::from_slice::<Config>(config_data.as_slice()).context(InvalidConfigSnafu)?;
 
+    let mut all_resources = vec![];
+
     match config.resources {
         None => println!("no resource directory set in config"),
         Some(v) => {
@@ -67,20 +79,36 @@ fn run() -> ServerResult<()> {
                 println!("no resource directory set in config");
             } else {
                 for resource_dir in v {
-                    let rs = scan_resource(resource_dir)
-                        .map_err(Box::new)
-                        .context(FailedToScanResourceSnafu)?;
-                    println!("resources: {rs:#?}");
+                    all_resources.extend(
+                        scan_resource(resource_dir)
+                            .map_err(Box::new)
+                            .context(FailedToScanResourceSnafu)?,
+                    );
                 }
             }
         }
     }
 
-    Ok(())
+    println!("all resources count: {}", all_resources.len());
+
+    let (player_command_tx, player_command_rx) = tokio::sync::mpsc::channel::<PlayerCommand>(2);
+    let (player_event_tx, _player_event_rx) = tokio::sync::mpsc::channel::<PlayerEvent>(2);
+
+    tokio::select!(
+        player_error = start_player(
+            all_resources
+                .get(0)
+                .expect("testing for start with the first resource"),
+                player_event_tx,
+                player_command_rx,
+        ) => player_error.context(PlayerThreadErroredSnafu),
+        http_error = start_http_server(player_command_tx) => http_error.context(HttpThreadErroredSnafu),
+    )
 }
 
-fn main() {
-    if let Err(e) = run() {
+#[tokio::main]
+async fn main() {
+    if let Err(e) = run().await {
         eprintln!("Error: {e}");
         std::process::exit(1);
     }
