@@ -1,7 +1,6 @@
 use std::{env, path::PathBuf};
 
-use morphlings_apis::{PlayerCommand, PlayerEvent};
-use serde::{Deserialize, Serialize};
+use morphlings_apis::{Config, PlayerCommand, PlayerEvent};
 use snafu::{ResultExt, Snafu};
 
 use crate::{
@@ -13,11 +12,6 @@ use crate::{
 mod http;
 mod player;
 mod resource;
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Config {
-    resources: Option<Vec<PathBuf>>,
-}
 
 #[derive(Debug, Snafu)]
 enum Error {
@@ -72,20 +66,15 @@ async fn run() -> ServerResult<()> {
 
     let mut all_resources = vec![];
 
-    match config.resources {
-        None => println!("no resource directory set in config"),
-        Some(v) => {
-            if v.is_empty() {
-                println!("no resource directory set in config");
-            } else {
-                for resource_dir in v {
-                    all_resources.extend(
-                        scan_resource(resource_dir)
-                            .map_err(Box::new)
-                            .context(FailedToScanResourceSnafu)?,
-                    );
-                }
-            }
+    if config.resources.is_empty() {
+        println!("no resource directory set in config");
+    } else {
+        for resource_dir in config.resources {
+            all_resources.extend(
+                scan_resource(resource_dir)
+                    .map_err(Box::new)
+                    .context(FailedToScanResourceSnafu)?,
+            );
         }
     }
 
@@ -99,8 +88,9 @@ async fn run() -> ServerResult<()> {
             all_resources
                 .get(0)
                 .expect("testing for start with the first resource"),
-                player_event_tx,
-                player_command_rx,
+            config.player,
+            player_event_tx,
+            player_command_rx,
         ) => player_error.context(PlayerThreadErroredSnafu),
         http_error = start_http_server(player_command_tx) => http_error.context(HttpThreadErroredSnafu),
     )

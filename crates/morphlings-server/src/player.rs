@@ -1,7 +1,7 @@
 use std::{fs::File, io::BufReader};
 use tokio::sync::mpsc::{Receiver, Sender};
 
-use morphlings_apis::{PlayerCommand, PlayerEvent, Resource};
+use morphlings_apis::{PlayerCommand, PlayerConfig, PlayerEvent, Resource};
 use rodio::{DeviceSinkError, Player as RodioPlayer};
 use snafu::{ResultExt, Snafu};
 
@@ -38,6 +38,8 @@ impl PlayerManager {
                     match cmd {
                         PlayerCommand::Pause => self.rodio_player.pause(),
                         PlayerCommand::Resume => self.rodio_player.play(),
+                        PlayerCommand::ChangeVolume(delta) => self.rodio_player.set_volume(self.rodio_player.volume() + delta),
+                        PlayerCommand::ChangeVolumeTo(value) => self.rodio_player.set_volume(value),
                     }
                     println!(">>> recvive command: {cmd:?}");
                 }
@@ -48,6 +50,7 @@ impl PlayerManager {
 
 pub(super) async fn start_player(
     resource: &Resource,
+    config: PlayerConfig,
     player_event_tx: Sender<PlayerEvent>,
     player_command_rx: Receiver<PlayerCommand>,
 ) -> Result<(), PlayerError> {
@@ -55,6 +58,8 @@ pub(super) async fn start_player(
         rodio::DeviceSinkBuilder::open_default_sink().context(FailedToOpenDeviceSinkSnafu)?;
 
     let rodio_player = rodio::Player::connect_new(&handle.mixer());
+
+    rodio_player.set_volume(config.volume);
 
     let mut player_manager = PlayerManager {
         rodio_player,
