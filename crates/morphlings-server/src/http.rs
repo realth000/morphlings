@@ -4,7 +4,7 @@ use axum::{
     Json, Router,
     extract::State,
     http::StatusCode,
-    response::IntoResponse,
+    response::{Html, IntoResponse},
     routing::{get, post},
 };
 use morphlings_apis::{HttpApiCode, HttpApiResponse, PlayerCommand};
@@ -81,6 +81,11 @@ async fn send_player_command(state: Arc<AppState>, player_command: PlayerCommand
     }
 }
 
+async fn on_get_root() -> Html<String> {
+    let page_data = include_str!("html/index.html");
+    Html(page_data.into())
+}
+
 async fn on_get_pause(State(state): State<Arc<AppState>>) -> ApiResponse {
     send_player_command(state, PlayerCommand::Pause).await
 }
@@ -118,6 +123,7 @@ pub(super) async fn start_http_server(
     let shared_state = Arc::new(AppState { player_command_tx });
 
     let app = Router::new()
+        .route("/", get(on_get_root))
         .route("/pause", get(on_get_pause))
         .route("/resume", get(on_get_resume))
         .route("/volume", post(on_post_volume))
