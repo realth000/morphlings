@@ -7,21 +7,34 @@ pub struct Resource {
     pub file_path: PathBuf,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PlayerEvent {
     Started(Resource),
     Paused(Resource),
     Resumed(Resource),
-    ErrorOccured(Box<dyn std::error::Error>),
+    ErrorOccured(String),
     Finished(Resource),
+    Stopped,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PlayerCommand {
     Pause,
     Resume,
+    PlayNext,
+    PlayPrevious,
     ChangeVolume(f32),
     ChangeVolumeTo(f32),
+    SetPlayMode(PlayMode),
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Default, PartialEq, Eq)]
+pub enum PlayMode {
+    #[default]
+    Default,
+    RepeatList,
+    RepeatTrack,
+    Shuffle,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -33,6 +46,7 @@ pub struct Config {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PlayerConfig {
     pub volume: f32,
+    pub play_mode: PlayMode,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

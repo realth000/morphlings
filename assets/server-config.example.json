@@ -1,3 +1,7 @@
 {
-  "resources": []
+  "resources": [],
+  "player": {
+    "volume": 0.3,
+    "play_mode": "Default"
+  }
 }

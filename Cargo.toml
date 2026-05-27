@@ -13,6 +13,7 @@ rust-version = "1.95.0"
 [workspace.dependencies]
 axum = "0.8.9"
 morphlings-apis = { path = "crates/morphlings-apis" }
+rand = { version = "0.10.1", features = ["std"] }
 rodio = { version = "0.22.2", features = ["playback"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"

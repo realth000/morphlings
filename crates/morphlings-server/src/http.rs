@@ -7,10 +7,10 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{get, post},
 };
-use morphlings_apis::{HttpApiCode, HttpApiResponse, PlayerCommand};
+use morphlings_apis::{HttpApiCode, HttpApiResponse, PlayMode, PlayerCommand};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use tokio::sync::mpsc::{Sender, error::SendError};
+use tokio::sync::broadcast::{Sender, error::SendError};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ApiResponse(HttpApiResponse);
@@ -74,8 +74,8 @@ struct AppState {
     player_command_tx: Sender<PlayerCommand>,
 }
 
-async fn send_player_command(state: Arc<AppState>, player_command: PlayerCommand) -> ApiResponse {
-    match state.player_command_tx.send(player_command).await {
+fn send_player_command(state: Arc<AppState>, player_command: PlayerCommand) -> ApiResponse {
+    match state.player_command_tx.send(player_command) {
         Ok(_) => ApiResponse::new_success(),
         Err(e) => e.into(),
     }
@@ -87,11 +87,11 @@ async fn on_get_root() -> Html<String> {
 }
 
 async fn on_get_pause(State(state): State<Arc<AppState>>) -> ApiResponse {
-    send_player_command(state, PlayerCommand::Pause).await
+    send_player_command(state, PlayerCommand::Pause)
 }
 
 async fn on_get_resume(State(state): State<Arc<AppState>>) -> ApiResponse {
-    send_player_command(state, PlayerCommand::Resume).await
+    send_player_command(state, PlayerCommand::Resume)
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,15 +106,36 @@ async fn on_post_volume(
     Json(payload): Json<VolumeParams>,
 ) -> ApiResponse {
     if let Some(value) = payload.value {
-        send_player_command(state, PlayerCommand::ChangeVolumeTo(value)).await
+        send_player_command(state, PlayerCommand::ChangeVolumeTo(value))
     } else if let Some(delta) = payload.delta {
-        send_player_command(state, PlayerCommand::ChangeVolume(delta)).await
+        send_player_command(state, PlayerCommand::ChangeVolume(delta))
     } else {
         ApiResponse::new(
             HttpApiCode::InvalidRequestParameter,
             "missing delta or value field".into(),
         )
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+struct PlayModeParams {
+    mode: PlayMode,
+}
+
+async fn on_post_play_mode(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<PlayModeParams>,
+) -> ApiResponse {
+    send_player_command(state, PlayerCommand::SetPlayMode(payload.mode))
+}
+
+async fn on_post_play_previous(State(state): State<Arc<AppState>>) -> ApiResponse {
+    send_player_command(state, PlayerCommand::PlayPrevious)
+}
+
+async fn on_post_play_next(State(state): State<Arc<AppState>>) -> ApiResponse {
+    send_player_command(state, PlayerCommand::PlayNext)
 }
 
 pub(super) async fn start_http_server(
@@ -127,6 +148,9 @@ pub(super) async fn start_http_server(
         .route("/pause", get(on_get_pause))
         .route("/resume", get(on_get_resume))
         .route("/volume", post(on_post_volume))
+        .route("/playMode", post(on_post_play_mode))
+        .route("/playPrevious", post(on_post_play_previous))
+        .route("/playNext", post(on_post_play_next))
         .with_state(shared_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:9012").await.unwrap();

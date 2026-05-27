@@ -2,6 +2,7 @@ use std::{env, path::PathBuf};
 
 use morphlings_apis::{Config, PlayerCommand, PlayerEvent};
 use snafu::{ResultExt, Snafu};
+use tokio::sync::broadcast::channel;
 
 use crate::{
     http::{HttpError, start_http_server},
@@ -80,14 +81,12 @@ async fn run() -> ServerResult<()> {
 
     println!("all resources count: {}", all_resources.len());
 
-    let (player_command_tx, player_command_rx) = tokio::sync::mpsc::channel::<PlayerCommand>(2);
-    let (player_event_tx, _player_event_rx) = tokio::sync::mpsc::channel::<PlayerEvent>(2);
+    let (player_command_tx, player_command_rx) = channel::<PlayerCommand>(1);
+    let (player_event_tx, _player_event_rx) = channel::<PlayerEvent>(1);
 
     tokio::select!(
         player_error = start_player(
-            all_resources
-                .get(0)
-                .expect("testing for start with the first resource"),
+            all_resources,
             config.player,
             player_event_tx,
             player_command_rx,

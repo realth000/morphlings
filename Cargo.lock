@@ -591,6 +591,7 @@ version = "0.0.0"
 dependencies = [
  "axum",
  "morphlings-apis",
+ "rand",
  "rodio",
  "serde",
  "serde_json",
