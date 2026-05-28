@@ -24,6 +24,8 @@
 
         .btn-group {
             display: flex;
+            margin-top: 12px;
+            margin-bottom: 12px;
             gap: 15px;
         }
 
@@ -41,6 +43,13 @@
 
         .btn:hover {
             background-color: #b0b0b0;
+        }
+
+        .btn.icon {
+            min-height: 60px;
+            margin: 8px;
+            border-radius: 8px;
+            font-size: 24px;
         }
 
         .form-group {
@@ -86,8 +95,12 @@
     <div class="card">
         <h2>Playing</h2>
         <div class="btn-group">
-            <button type="button" class="btn" onclick="pause()">Pause</button>
-            <button type="button" class="btn" onclick="resume()">Resume</button>
+            <button type="button" class="btn icon" onclick="resume()">▶</button>
+            <button type="button" class="btn icon" onclick="pause()">⏸</button>
+        </div>
+        <div class="btn-group">
+            <button type="button" class="btn icon" onclick="playPrevious()">⏮</button>
+            <button type="button" class="btn icon" onclick="playNext()">⏭</button>
         </div>
     </div>
 
@@ -138,6 +151,26 @@
                 showResult('GET', '/resume', response.status, data);
             } catch (e) {
                 showResult('GET', '/resume', '<null>', `Failed to GET /resume: ${e}`);
+            }
+        }
+
+        async function playPrevious() {
+            try {
+                const response = await fetch('/playPrevious', { method: 'POST' })
+                const data = await response.json()
+                showResult('POST', '/playPrevious', response.status, data);
+            } catch (e) {
+                showResult('POST', '/playPrevious', '<null>', `Failed to POST /playPrevious: ${e}`);
+            }
+        }
+
+        async function playNext() {
+            try {
+                const response = await fetch('/playNext', { method: 'POST' })
+                const data = await response.json()
+                showResult('POST', '/playNext', response.status, data);
+            } catch (e) {
+                showResult('POST', '/playNext', '<null>', `Failed to POST /playNext: ${e}`);
             }
         }
 
