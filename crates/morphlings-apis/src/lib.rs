@@ -1,10 +1,11 @@
-use std::{path::PathBuf, time::Duration};
+use std::time::Duration;
 
+use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Resource {
-    pub file_path: PathBuf,
+    pub file_path: Utf8PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -39,7 +40,7 @@ pub enum PlayMode {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub resources: Vec<PathBuf>,
+    pub resources: Vec<Utf8PathBuf>,
     pub player: PlayerConfig,
 }
 

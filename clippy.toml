@@ -1,0 +1,4 @@
+disallowed-methods = [
+    { path = "std::path::Path::new", reason = "Use camino::Utf8Path instead" },
+    { path = "std::path::PathBuf::new", reason = "Use camino::Utf8Path instead" },
+]

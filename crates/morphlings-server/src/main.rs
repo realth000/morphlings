@@ -1,5 +1,6 @@
-use std::{env, path::PathBuf};
+use std::env;
 
+use camino::Utf8PathBuf;
 use morphlings_apis::{Config, PlayerCommand, PlayerEvent, PlayerState};
 use snafu::{ResultExt, Snafu};
 use tokio::sync::{broadcast, watch};
@@ -55,7 +56,7 @@ async fn run() -> ServerResult<()> {
         return Err(ConfigPathNotSetSnafu.build());
     }
 
-    let config_path = PathBuf::from(args.get(1).unwrap());
+    let config_path = Utf8PathBuf::from(args.get(1).unwrap());
 
     let config_data = std::fs::read(&config_path).context(FailedToReadFileSnafu {
         file_type: "config",

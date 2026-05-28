@@ -4,6 +4,7 @@ edition = "2024"
 
 [dependencies]
 axum = { workspace = true }
+camino = { workspace = true }
 morphlings-apis = { workspace = true }
 rand = { workspace = true }
 rodio = { workspace = true }

@@ -1,5 +1,6 @@
-use std::{fs, path::PathBuf};
+use std::fs;
 
+use camino::Utf8PathBuf;
 use morphlings_apis::Resource;
 use snafu::{ResultExt, whatever};
 
@@ -13,7 +14,7 @@ use crate::{FailedToReadFileSnafu, ServerResult};
 /// be deprecated or disabled in the future.
 const ACCEPTED_EXTENSION: [&'static str; 1] = [".mp3"];
 
-pub(crate) fn scan_resource(path: PathBuf) -> ServerResult<Vec<Resource>> {
+pub(crate) fn scan_resource(path: Utf8PathBuf) -> ServerResult<Vec<Resource>> {
     if !path.exists() {
         whatever!("resrouce not exists");
     }
@@ -21,31 +22,33 @@ pub(crate) fn scan_resource(path: PathBuf) -> ServerResult<Vec<Resource>> {
     collect_files(&path)
 }
 
-fn collect_files(path: &PathBuf) -> ServerResult<Vec<Resource>> {
+fn collect_files(path: &Utf8PathBuf) -> ServerResult<Vec<Resource>> {
     let mut all_resources = vec![];
     for entry in fs::read_dir(path).context(FailedToReadFileSnafu {
         file_type: "resource dir",
-        path: path.to_string_lossy(),
+        path: path.to_string(),
     })? {
         let resource = entry.context(FailedToReadFileSnafu {
             file_type: "resource file",
-            path: format!("in {}", path.to_string_lossy()),
+            path: format!("in {}", path.to_string()),
         })?;
 
         if resource
             .metadata()
             .context(FailedToReadFileSnafu {
                 file_type: "resource file",
-                path: format!("in {} metadata", path.to_string_lossy()),
+                path: format!("in {} metadata", path.to_string()),
             })?
             .is_dir()
         {
             // Directory.
-            all_resources.extend(collect_files(&resource.path())?);
+            all_resources.extend(collect_files(
+                &Utf8PathBuf::try_from(resource.path()).expect("invalid utf8 path"),
+            )?);
         } else {
             // File
-            let file_path_buf = resource.path();
-            let file_path = file_path_buf.to_string_lossy();
+            let file_path_buf = Utf8PathBuf::try_from(resource.path()).expect("invalid utf8 path");
+            let file_path = file_path_buf.to_string();
             if ACCEPTED_EXTENSION
                 .iter()
                 .all(|ext| !file_path.ends_with(ext))

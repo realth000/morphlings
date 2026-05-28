@@ -12,6 +12,7 @@ rust-version = "1.95.0"
 
 [workspace.dependencies]
 axum = "0.8.9"
+camino = { version = "1.2.2", features = ["serde1"] }
 morphlings-apis = { path = "crates/morphlings-apis" }
 rand = { version = "0.10.1", features = ["std"] }
 rodio = { version = "0.22.2", features = ["playback"] }
