@@ -1,8 +1,8 @@
 use std::{env, path::PathBuf};
 
-use morphlings_apis::{Config, PlayerCommand, PlayerEvent};
+use morphlings_apis::{Config, PlayerCommand, PlayerEvent, PlayerState};
 use snafu::{ResultExt, Snafu};
-use tokio::sync::broadcast::channel;
+use tokio::sync::{broadcast, watch};
 
 use crate::{
     http::{HttpError, start_http_server},
@@ -81,8 +81,9 @@ async fn run() -> ServerResult<()> {
 
     println!("all resources count: {}", all_resources.len());
 
-    let (player_command_tx, player_command_rx) = channel::<PlayerCommand>(1);
-    let (player_event_tx, _player_event_rx) = channel::<PlayerEvent>(1);
+    let (player_command_tx, player_command_rx) = broadcast::channel::<PlayerCommand>(1);
+    let (player_event_tx, _player_event_rx) = broadcast::channel::<PlayerEvent>(1);
+    let (player_state_tx, player_state_rx) = watch::channel::<PlayerState>(PlayerState::default());
 
     tokio::select!(
         player_error = start_player(
@@ -90,8 +91,9 @@ async fn run() -> ServerResult<()> {
             config.player,
             player_event_tx,
             player_command_rx,
+            player_state_tx,
         ) => player_error.context(PlayerThreadErroredSnafu),
-        http_error = start_http_server(player_command_tx) => http_error.context(HttpThreadErroredSnafu),
+        http_error = start_http_server(player_command_tx, player_state_rx) => http_error.context(HttpThreadErroredSnafu),
     )
 }
 

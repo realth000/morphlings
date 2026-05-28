@@ -7,10 +7,13 @@ use axum::{
     response::{Html, IntoResponse},
     routing::{get, post},
 };
-use morphlings_apis::{HttpApiCode, HttpApiResponse, PlayMode, PlayerCommand};
+use morphlings_apis::{HttpApiCode, HttpApiResponse, PlayMode, PlayerCommand, PlayerState};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use tokio::sync::broadcast::{Sender, error::SendError};
+use tokio::sync::{
+    broadcast::{self, error::SendError},
+    watch,
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ApiResponse(HttpApiResponse);
@@ -71,7 +74,8 @@ pub(super) enum HttpError {
 }
 
 struct AppState {
-    player_command_tx: Sender<PlayerCommand>,
+    player_command_tx: broadcast::Sender<PlayerCommand>,
+    player_state_rx: watch::Receiver<PlayerState>,
 }
 
 fn send_player_command(state: Arc<AppState>, player_command: PlayerCommand) -> ApiResponse {
@@ -86,11 +90,16 @@ async fn on_get_root() -> Html<String> {
     Html(page_data.into())
 }
 
-async fn on_get_pause(State(state): State<Arc<AppState>>) -> ApiResponse {
+async fn on_get_state(State(state): State<Arc<AppState>>) -> ApiResponse {
+    let current_player_state = state.player_state_rx.borrow().clone();
+    ApiResponse::new_with_data(serde_json::to_value(current_player_state).unwrap())
+}
+
+async fn on_post_pause(State(state): State<Arc<AppState>>) -> ApiResponse {
     send_player_command(state, PlayerCommand::Pause)
 }
 
-async fn on_get_resume(State(state): State<Arc<AppState>>) -> ApiResponse {
+async fn on_post_resume(State(state): State<Arc<AppState>>) -> ApiResponse {
     send_player_command(state, PlayerCommand::Resume)
 }
 
@@ -139,14 +148,19 @@ async fn on_post_play_next(State(state): State<Arc<AppState>>) -> ApiResponse {
 }
 
 pub(super) async fn start_http_server(
-    player_command_tx: Sender<PlayerCommand>,
+    player_command_tx: broadcast::Sender<PlayerCommand>,
+    player_state_rx: watch::Receiver<PlayerState>,
 ) -> Result<(), HttpError> {
-    let shared_state = Arc::new(AppState { player_command_tx });
+    let shared_state = Arc::new(AppState {
+        player_command_tx,
+        player_state_rx,
+    });
 
     let app = Router::new()
         .route("/", get(on_get_root))
-        .route("/pause", get(on_get_pause))
-        .route("/resume", get(on_get_resume))
+        .route("/state", get(on_get_state))
+        .route("/pause", post(on_post_pause))
+        .route("/resume", post(on_post_resume))
         .route("/volume", post(on_post_volume))
         .route("/playMode", post(on_post_play_mode))
         .route("/playPrevious", post(on_post_play_previous))

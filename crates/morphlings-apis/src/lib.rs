@@ -1,8 +1,8 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Resource {
     pub file_path: PathBuf,
 }
@@ -47,6 +47,52 @@ pub struct Config {
 pub struct PlayerConfig {
     pub volume: f32,
     pub play_mode: PlayMode,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub enum PlayState {
+    /// Stopped.
+    ///
+    /// Resourced may be loaded or not.
+    Stopped,
+
+    /// Playing an audio.
+    Playing,
+
+    /// Paused when playing an audio.
+    Paused,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct PlayerState {
+    /// The audio currently playing.
+    pub current_resource: Option<Resource>,
+
+    /// Current play state.
+    pub play_state: PlayState,
+
+    /// Volume.
+    ///
+    /// Value between 0 and 1.
+    pub volume: f32,
+
+    /// Current play mode.
+    pub play_mode: PlayMode,
+
+    /// Current duration in audio playing.
+    pub duration: Duration,
+}
+
+impl Default for PlayerState {
+    fn default() -> Self {
+        Self {
+            current_resource: None,
+            play_state: PlayState::Stopped,
+            volume: 0.0,
+            play_mode: PlayMode::Default,
+            duration: Duration::ZERO,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -6,12 +6,77 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controller</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            max-width: 500px;
-            margin: 40px auto;
-            padding: 20px;
             background-color: #fefefe;
             color: #333333;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 0;
+            padding-bottom: 300px;
+        }
+
+        .main-content {
+            max-width: 500px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .debug-output {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100%;
+            max-width: 1000px;
+            box-sizing: border-box;
+            height: 280px;
+            border: 1px solid #d0d0d0;
+            background: #f0f0f0;
+            padding: 15px 40px;
+            margin: 0;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            border-radius: 4px;
+            padding-top: 12px;
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+
+        .debug-output h2 {
+            margin-top: 0;
+            margin-bottom: 0px;
+        }
+
+        .debug-output pre {
+            margin-top: 12px;
+            margin-bottom: 0;
+        }
+
+        #result-display {
+            flex: 1;
+            overflow-y: auto;
+            font-size: 16px;
+            border: 1px solid #d0d0d0;
+            padding: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #fff;
+        }
+
+        #method-display {
+            font-size: 16px;
+            border: 1px solid #d0d0d0;
+            padding: 4px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #e0e0e0;
         }
 
         .card {
@@ -48,7 +113,6 @@
         .btn.icon {
             min-height: 60px;
             margin: 8px;
-            border-radius: 8px;
             font-size: 24px;
         }
 
@@ -66,7 +130,6 @@
             width: 100%;
             padding: 8px;
             background-color: #d0d0d0;
-            box-sizing: border-box;
             border: none;
             border-radius: 4px;
             margin-bottom: 10px;
@@ -75,82 +138,93 @@
         input[type="number"]:hover {
             background-color: #b0b0b0;
         }
-
-
-        #result-display {
-            font-size: 20px;
-            border: 1px solid #d0d0d0;
-            padding: 10px;
-            border-radius: 4px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
     </style>
 </head>
 
 <body>
 
-    <h1>Controller</h1>
+    <div class="main-content">
+        <h1>Controller</h1>
 
-    <div class="card">
-        <h2>Playing</h2>
-        <div class="btn-group">
-            <button type="button" class="btn icon" onclick="resume()">▶</button>
-            <button type="button" class="btn icon" onclick="pause()">⏸</button>
+        <div class="card">
+            <h2>Playing</h2>
+            <div class="btn-group">
+                <button type="button" style="margin: 8px;" class="btn" onclick="getState()">Get state</button>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn icon" onclick="resume()">▶</button>
+                <button type="button" class="btn icon" onclick="pause()">⏸</button>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn icon" onclick="playPrevious()">⏮</button>
+                <button type="button" class="btn icon" onclick="playNext()">⏭</button>
+            </div>
         </div>
-        <div class="btn-group">
-            <button type="button" class="btn icon" onclick="playPrevious()">⏮</button>
-            <button type="button" class="btn icon" onclick="playNext()">⏭</button>
+
+        <div class="card">
+            <h2>Set volume to</h2>
+            <div class="form-group">
+                <label for="volume-value">Target volume</label>
+                <input type="number" id="volume-value" step="0.05" min="0" max="1" placeholder="0.2">
+            </div>
+            <button type="button" class="btn"
+                onclick="sendVolume({value: parseFloat(document.getElementById('volume-value').value)})">Set
+                volume</button>
+        </div>
+
+        <div class="card">
+            <h2>Change volume value</h2>
+            <div class="form-group">
+                <label for="volume-delta">Volume up or down by value</label>
+                <input type="number" id="volume-delta" step="0.05" placeholder="0.1 for increase; -0.1 for decrease">
+            </div>
+            <button type="button" class="btn"
+                onclick="sendVolume({delta: parseFloat(document.getElementById('volume-delta').value)})">Change
+                volume</button>
         </div>
     </div>
 
-    <div class="card">
-        <h2>Set volume to</h2>
-        <div class="form-group">
-            <label for="volume-value">Target volume</label>
-            <input type="number" id="volume-value" step="0.05" min="0" max="1" placeholder="0.2">
+    <div class="debug-output">
+        <div style="display: flex; flex-direction: row; gap: 12px; align-items: center;">
+            <h2>Debug</h2>
+            <pre id="datetime-display"></pre>
         </div>
-        <button type="button" class="btn"
-            onclick="sendVolume({value: parseFloat(document.getElementById('volume-value').value)})">Set
-            volume</button>
-    </div>
-
-    <div class="card">
-        <h2>Change volume value</h2>
-        <div class="form-group">
-            <label for="volume-delta">Volume up or down by value</label>
-            <input type="number" id="volume-delta" step="0.05" placeholder="0.1 for increase; -0.1 for decrease">
-        </div>
-        <button type="button" class="btn"
-            onclick="sendVolume({delta: parseFloat(document.getElementById('volume-delta').value)})">Change
-            volume</button>
-    </div>
-
-    <div class="card">
-        <h2>Debug</h2>
+        <pre id="method-display">&nbsp;</pre>
         <pre id="result-display"></pre>
     </div>
 
     <script>
         const display = document.getElementById('result-display');
+        const methodDisplay = document.getElementById('method-display');
+        const datetimeDisplay = document.getElementById('datetime-display');
+
+        async function getState() {
+            try {
+                const response = await fetch('/state', { method: 'GET' })
+                const data = await response.json()
+                showResult('GET', '/state', response.status, data);
+            } catch (e) {
+                showResult('GET', '/state', '<null>', `Failed to GET /state: ${e}`);
+            }
+        }
 
         async function pause() {
             try {
-                const response = await fetch('/pause', { method: 'GET' })
+                const response = await fetch('/pause', { method: 'POST' })
                 const data = await response.json()
-                showResult('GET', '/pause', response.status, data);
+                showResult('POST', '/pause', response.status, data);
             } catch (e) {
-                showResult('GET', '/pause', '<null>', `Failed to GET /pause: ${e}`);
+                showResult('POST', '/pause', '<null>', `Failed to POST /pause: ${e}`);
             }
         }
 
         async function resume() {
             try {
-                const response = await fetch('/resume', { method: 'GET' })
+                const response = await fetch('/resume', { method: 'POST' })
                 const data = await response.json()
-                showResult('GET', '/resume', response.status, data);
+                showResult('POST', '/resume', response.status, data);
             } catch (e) {
-                showResult('GET', '/resume', '<null>', `Failed to GET /resume: ${e}`);
+                showResult('POST', '/resume', '<null>', `Failed to POST /resume: ${e}`);
             }
         }
 
@@ -197,7 +271,19 @@
         }
 
         function showResult(method, route, statusCode, response) {
-            display.textContent = `[${method} ${route} ${statusCode}]\n${JSON.stringify(response, null, 2)}`;
+            methodDisplay.textContent = `[${method} ${route} ${statusCode}]`;
+            datetimeDisplay.textContent = `${getFormattedTime()}`;
+            display.textContent = `${JSON.stringify(response, null, 2)}`;
+        }
+
+        function getFormattedTime() {
+            const now = new Date();
+
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+
+            return `${hours}:${minutes}:${seconds}`;
         }
     </script>
 

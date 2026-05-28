@@ -1,8 +1,10 @@
 use rand::RngExt;
-use std::{fs::File, io::BufReader};
-use tokio::sync::broadcast::{Receiver, Sender};
+use std::{fs::File, io::BufReader, time::Duration};
+use tokio::sync::{broadcast, watch};
 
-use morphlings_apis::{PlayMode, PlayerCommand, PlayerConfig, PlayerEvent, Resource};
+use morphlings_apis::{
+    PlayMode, PlayState, PlayerCommand, PlayerConfig, PlayerEvent, PlayerState, Resource,
+};
 use rodio::{DeviceSinkError, Player as RodioPlayer};
 use snafu::{ResultExt, Snafu};
 
@@ -16,8 +18,21 @@ pub struct PlayerManager {
     resources: Vec<Resource>,
     rodio_player: RodioPlayer,
     curr_resource_index: Option<usize>,
-    player_event_tx: Sender<PlayerEvent>,
-    player_command_rx: Receiver<PlayerCommand>,
+    player_event_tx: broadcast::Sender<PlayerEvent>,
+    player_command_rx: broadcast::Receiver<PlayerCommand>,
+
+    /// Observerable player state.
+    player_state_tx: watch::Sender<PlayerState>,
+
+    /// The current state.
+    ///
+    /// A standalone copy of the state stored in manager.
+    player_state: PlayerState,
+
+    /// Current player config.
+    ///
+    /// Everytime you changed the config, update `player_state` and sync the
+    /// latest state in [Self::player_state_tx].
     config: PlayerConfig,
 
     /// List of resources index played in history.
@@ -64,10 +79,10 @@ impl PlayerManager {
                     println!("[player] recvive command: {cmd:?}");
 
                     match cmd {
-                        PlayerCommand::Pause => self.rodio_player.pause(),
-                        PlayerCommand::Resume => self.rodio_player.play(),
-                        PlayerCommand::ChangeVolume(delta) => self.rodio_player.set_volume(self.rodio_player.volume() + delta),
-                        PlayerCommand::ChangeVolumeTo(value) => self.rodio_player.set_volume(value),
+                        PlayerCommand::Pause => self.pause(),
+                        PlayerCommand::Resume => self.resume(),
+                        PlayerCommand::ChangeVolume(delta) => self.set_volume(self.rodio_player.volume() + delta),
+                        PlayerCommand::ChangeVolumeTo(value) => self.set_volume(value),
                         PlayerCommand::SetPlayMode(play_mode) => self.change_play_mode(play_mode),
                         PlayerCommand::PlayNext => self.play_next(),
                         PlayerCommand::PlayPrevious => self.play_previous(),
@@ -77,14 +92,50 @@ impl PlayerManager {
         }
     }
 
+    fn update_state(&mut self) {
+        if let Err(e) = self.player_state_tx.send(self.player_state.clone()) {
+            eprintln!("[player] failed to update player state: {e:?}");
+        }
+    }
+
     fn send_player_event(&mut self, player_event: PlayerEvent) {
         if let Err(e) = self.player_event_tx.send(player_event) {
             println!("[player] failed to send player event: {e:?}");
         }
     }
 
-    fn apply_config_on_init(&self) {
-        self.rodio_player.set_volume(self.config.volume);
+    fn apply_config_on_init(&mut self) {
+        if self.config.volume != self.rodio_player.volume() {
+            self.rodio_player.set_volume(self.config.volume);
+            self.player_state.volume = self.config.volume;
+        }
+
+        self.player_state.play_mode = self.config.play_mode.clone();
+        self.player_state.play_state = PlayState::Paused;
+
+        self.update_state();
+    }
+
+    fn pause(&mut self) {
+        if !self.rodio_player.is_paused() {
+            self.rodio_player.pause();
+            self.player_state.play_state = PlayState::Paused;
+            self.update_state();
+        }
+    }
+
+    fn resume(&mut self) {
+        if self.rodio_player.is_paused() {
+            self.rodio_player.play();
+            self.player_state.play_state = PlayState::Playing;
+            self.update_state();
+        }
+    }
+
+    fn set_volume(&mut self, volume: f32) {
+        self.rodio_player.set_volume(volume);
+        self.player_state.volume = volume;
+        self.update_state();
     }
 
     /// Play previous one.
@@ -216,9 +267,10 @@ impl PlayerManager {
             }
         }
 
-        match self.resources.get(index) {
+        // FIXME: Do not clone here.
+        match self.resources.get(index).map(|x| x.to_owned()) {
             Some(resource) => {
-                self.play_resource(resource);
+                self.play_resource(&resource);
                 true
             }
             None => {
@@ -233,14 +285,16 @@ impl PlayerManager {
     /// Does not change [Self::play_history] and [Self::shuffle_mode_play_history_index];
     ///
     /// **The caller MUST ensure [index] if not out of range**
-    fn play_resource_in_history_at_index(&self, history_index: usize) {
+    fn play_resource_in_history_at_index(&mut self, history_index: usize) {
         match self
             .play_history
             .get(history_index)
             .and_then(|x| self.resources.get(*x))
+            // FIXME: Do not clone here.
+            .map(|x| x.to_owned())
         {
             Some(resource) => {
-                self.play_resource(resource);
+                self.play_resource(&resource);
             }
             None => {
                 println!(
@@ -253,13 +307,17 @@ impl PlayerManager {
     /// Do not use this function directly.
     ///
     /// Use [Self::play_resource_at_index] instead.
-    fn play_resource(&self, resource: &Resource) {
+    fn play_resource(&mut self, resource: &Resource) {
         let file = BufReader::new(File::open(&resource.file_path).unwrap());
         let audio = rodio::Decoder::try_from(file).unwrap();
         self.rodio_player.stop();
         self.rodio_player.clear();
         self.rodio_player.append(audio);
         self.rodio_player.play();
+
+        self.player_state.current_resource = Some(resource.to_owned());
+        self.player_state.play_state = PlayState::Playing;
+        self.update_state();
     }
 
     fn stop(&mut self) {
@@ -275,15 +333,18 @@ impl PlayerManager {
         }
 
         self.play_history.clear();
-        self.config.play_mode = play_mode;
+        self.config.play_mode = play_mode.clone();
+        self.player_state.play_mode = play_mode;
+        self.update_state();
     }
 }
 
 pub(super) async fn start_player(
     resources: Vec<Resource>,
     config: PlayerConfig,
-    player_event_tx: Sender<PlayerEvent>,
-    player_command_rx: Receiver<PlayerCommand>,
+    player_event_tx: broadcast::Sender<PlayerEvent>,
+    player_command_rx: broadcast::Receiver<PlayerCommand>,
+    player_state_tx: watch::Sender<PlayerState>,
 ) -> Result<(), PlayerError> {
     let handle =
         rodio::DeviceSinkBuilder::open_default_sink().context(FailedToOpenDeviceSinkSnafu)?;
@@ -294,9 +355,17 @@ pub(super) async fn start_player(
         curr_resource_index: Some(0),
         player_event_tx,
         player_command_rx,
+        player_state_tx,
         config,
         play_history: vec![],
         shuffle_mode_play_history_index: 0,
+        player_state: PlayerState {
+            current_resource: None,
+            play_state: PlayState::Stopped,
+            volume: 0.0,
+            play_mode: PlayMode::Default,
+            duration: Duration::from_secs(0),
+        },
     };
 
     player_manager.run().await;
